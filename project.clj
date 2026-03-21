@@ -1,4 +1,4 @@
-(defproject com.github.rafd/dat "0.0.1-20260306-0"
+(defproject com.github.rafd/dat "0.0.1-20260321-0"
   :description "Database library wrapping datomic/datascript/datalevin with a common API, and exposing malli schemas and a pathom graph."
   :url "https://github.com/rafd/dat"
   :license {:name "MIT"}
