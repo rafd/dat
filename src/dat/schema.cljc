@@ -18,6 +18,7 @@
       (into [:enum] (keys dm/datalog-type->malli-type))]
      [:dat/unique {:optional true}
       [:enum :dat.unique/identity]]
+     [:dat/no-history {:optional true} :boolean]
      [:dat/rel {:optional true}
       [:tuple
        [:enum :dat.rel/one :dat.rel/many]
@@ -94,7 +95,10 @@
                                        :dat.rel/many
                                        :db.cardinality/many
                                        nil)
-                                     :db.cardinality/one)}
+                                     :db.cardinality/one)
+                   :db/noHistory (when (and (= db-type :dat.db/datomic)
+                                            (:dat/no-history o))
+                                   true)}
                    util/remove-nil-vals)))
        ((fn [vals]
           (case db-type
