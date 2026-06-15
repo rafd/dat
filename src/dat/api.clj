@@ -51,7 +51,7 @@
 
 (defn pull
   [derefed-db selector eid]
-  (apply d/pull @(::conn derefed-db) selector eid))
+  (d/pull @(::conn derefed-db) selector eid))
 
 (defn uuid []
   (uuid/random))
