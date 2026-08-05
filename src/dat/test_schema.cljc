@@ -7,5 +7,4 @@
    :entity/post
    {:post/id {:dat/type :db.type/uuid
               :dat/unique :dat.unique/identity}
-    :post/user {:dat/type :db.type/ref
-                :dat/rel [:dat.rel/one :entity/user :user/id]}}})
+    :post/user {:dat/rel [:dat.rel/one :entity/user :user/id]}}})

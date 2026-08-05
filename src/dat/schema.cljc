@@ -19,6 +19,8 @@
      [:dat/unique {:optional true}
       [:enum :dat.unique/identity]]
      [:dat/no-history {:optional true} :boolean]
+     [:dat/component? {:optional true} :boolean]
+     [:dat/spec {:optional true} :any]
      [:dat/rel {:optional true}
       [:tuple
        [:enum :dat.rel/one :dat.rel/many]
@@ -73,7 +75,7 @@
   [db-type schema]
   {:pre [(m/validate [:enum
                       :dat.db/datomic
-                      :dat.db/datelevin
+                      :dat.db/datalevin
                       :dat.db/datascript] db-type)
          (m/validate Schema schema)]}
   (->> schema
@@ -98,11 +100,16 @@
                                      :db.cardinality/one)
                    :db/noHistory (when (and (= db-type :dat.db/datomic)
                                             (:dat/no-history o))
-                                   true)}
+                                   true)
+                   :db/isComponent (when (and (#{:dat.db/datalevin
+                                                 :dat.db/datomic} db-type)
+                                              (:dat/component? o))
+                                     true)}
                    util/remove-nil-vals)))
        ((fn [vals]
           (case db-type
             :dat.db/datomic vals
-            :dat.db/datascript (zipmap (map :db/ident vals)
-                                       (map #(dissoc % :db/ident) vals)))))))
+            (:dat.db/datascript :dat.db/datalevin)
+            (zipmap (map :db/ident vals)
+                    (map #(dissoc % :db/ident) vals)))))))
 
