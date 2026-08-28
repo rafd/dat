@@ -1,12 +1,40 @@
 (ns dat.graph
   (:require
-   [com.wsscode.pathom3.connect.operation :as pco]
    [com.wsscode.pathom3.connect.indexes :as pci]
+   [com.wsscode.pathom3.connect.operation :as pco]
+   [com.wsscode.pathom3.connect.planner :as pcp]
    [com.wsscode.pathom3.interface.eql :as p.eql]
    [dat.schema :as schema]))
 
 (defn blanks-for [ks]
   (zipmap ks (repeat nil)))
+
+(defn expected-shape
+  "What the running pathom node wants from this resolver, as `{attr {}}`.
+   `join-key` is the attr the resolver returns entities under, for resolvers
+   with a nested output. Nil when the resolver runs outside of a pathom plan."
+  ([env]
+   (-> env ::pcp/node ::pcp/expects))
+  ([env join-key]
+   (-> env ::pcp/node ::pcp/expects (get join-key))))
+
+(defn requested-attrs
+  "The subset of `attrs` that the running query asks for.
+   Falls back to all of them when pathom tells us nothing, so that a resolver
+   called outside of a plan still returns a whole entity."
+  [shape attrs]
+  (let [requested (when shape
+                    (filterv shape attrs))]
+    (if (seq requested)
+      requested
+      (vec attrs))))
+
+(defn attrs-cache-key
+  "Pathom keys the resolver cache on op-name+input+params; entities pulled with
+   different attrs must not collide on it."
+  [op-name attrs-for-env]
+  (fn [env input]
+    [op-name input (pco/params env) (attrs-for-env env)]))
 
 (defn ->resolvers
   [schema]
@@ -17,45 +45,53 @@
 
                     [
                      ;; widgets - _ => [{widget/*}, ...]
-                     (let [attrs (schema/direct-attrs schema entity-type)]
+                     (let [all-attrs (vec (schema/direct-attrs schema entity-type))
+                           op-name (symbol (str "all-" entity-type))
+                           attrs-for-env (fn [env]
+                                           (requested-attrs (expected-shape env entity-type) all-attrs))]
                        (pco/resolver
-                        (symbol (str "all-" entity-type))
+                        op-name
                         {::pco/input []
-                         ::pco/output [{entity-type (vec attrs)}]}
+                         ::pco/output [{entity-type all-attrs}]
+                         ::pco/cache-key (attrs-cache-key op-name attrs-for-env)}
                         (fn [{::keys [q ->db conn] :as env} _in]
-                          (let [additional-where (:where (pco/params env))]
+                          (let [additional-where (:where (pco/params env))
+                                attrs (attrs-for-env env)
+                                blank (blanks-for attrs)]
                             {entity-type
-                             ;; TODO could pull *just the attributes that are asked for
-                             (let [blank (blanks-for attrs)]
-                               (->> (q (concat [:find [(list 'pull '?e attrs) '...]
-                                                :where
-                                                ['?e source-id-key '_]]
-                                               additional-where)
-                                       (->db conn))
-                                    (map (fn [e]
-                                           (merge blank e)))))}))))
+                             (->> (q (concat [:find [(list 'pull '?e attrs) '...]
+                                              :where
+                                              ['?e source-id-key '_]]
+                                             additional-where)
+                                     (->db conn))
+                                  (map (fn [e]
+                                         (merge blank e))))}))))
                      ]
 
                     ;; (unique-key)->widget => {widget/*}
                     (->> attrs
                          (keep (fn [[attr-key opts]]
                                  (when (:dat/unique opts)
-                                   (let [attrs (schema/direct-attrs schema entity-type)]
+                                   (let [all-attrs (vec (schema/direct-attrs schema entity-type))
+                                         op-name (symbol (str attr-key "->" entity-type))
+                                         attrs-for-env (fn [env]
+                                                         (requested-attrs (expected-shape env) all-attrs))]
                                      (pco/resolver
-                                      (symbol (str attr-key "->" entity-type))
+                                      op-name
                                       {::pco/input [attr-key]
-                                       ::pco/output (vec attrs)}
-                                      (fn [{::keys [q ->db conn]} in]
-                                        ;; TODO could pull *just* the attributes that are asked for?
+                                       ::pco/output all-attrs
+                                       ::pco/cache-key (attrs-cache-key op-name attrs-for-env)}
+                                      (fn [{::keys [q ->db conn] :as env} in]
                                         ;; TODO could access indexes directly?
-                                        (merge
-                                         (blanks-for attrs)
-                                         (q [:find (list 'pull '?e attrs) '.
-                                             :in '$ '?value
-                                             :where
-                                             ['?e attr-key '?value]]
-                                            (->db conn)
-                                            (attr-key in))))))))))
+                                        (let [attrs (attrs-for-env env)]
+                                          (merge
+                                           (blanks-for attrs)
+                                           (q [:find (list 'pull '?e attrs) '.
+                                               :in '$ '?value
+                                               :where
+                                               ['?e attr-key '?value]]
+                                              (->db conn)
+                                              (attr-key in)))))))))))
 
                     ;; widget-sprocket - widget-id => [sprocket/id, ...]
                     ;; sprocket-widgets - sprocket-id => [widget/id, ...]
