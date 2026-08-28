@@ -1,0 +1,4 @@
+{:linters
+ {:unresolved-symbol
+  ;; `_` is rcf's wildcard in the expected value of an assertion
+  {:exclude [(hyperfiddle.rcf/tests [_])]}}}

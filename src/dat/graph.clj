@@ -98,91 +98,90 @@
                     (->> attrs
                          (keep (fn [[attr-key opts]]
                                  (when-let [[cardinality target-entity-type target-id-key] (:dat/rel opts)]
-                                   (let []
-                                     [;; normal direction: widget - sprocket(s)
-                                      (let [in-key source-id-key
-                                            out-key attr-key
-                                            out-ids-key target-id-key
-                                            count-key (keyword
-                                                       (namespace attr-key)
-                                                       (str (name attr-key) "-count"))]
-                                        (case cardinality
-                                          :dat.rel/one
-                                          (pco/resolver
-                                           (symbol (str entity-type "[" attr-key "]->" target-entity-type))
-                                           {::pco/input [in-key]
-                                            ::pco/output [{out-key
-                                                           [target-id-key]}
-                                                          out-ids-key]}
-                                           (fn [{::keys [q ->db conn]} in]
-                                             (let [id (q [:find '?target-id '.
-                                                          :in '$ '?id
-                                                          :where
-                                                          ['?e source-id-key '?id]
-                                                          ['?e attr-key '?target-e]
-                                                          ['?target-e target-id-key '?target-id]]
-                                                         (->db conn)
-                                                         (in-key in))]
-                                               {out-ids-key id
-                                                out-key (when id
-                                                          {target-id-key id})})))
-
-                                          :dat.rel/many
-                                          (pco/resolver
-                                           (symbol (str entity-type "[" attr-key "]->" target-entity-type "+"))
-                                           {::pco/input [in-key]
-                                            ::pco/output [{out-key
-                                                           [target-id-key]}
-                                                          out-ids-key
-                                                          count-key]}
-                                           (fn [{::keys [q ->db conn]} in]
-                                             (let [ids (q [:find ['?target-id '...]
-                                                           :in '$ '?id
-                                                           :where
-                                                           ['?e source-id-key '?id]
-                                                           ['?e attr-key '?target-e]
-                                                           ['?target-e target-id-key '?target-id]]
-                                                          (->db conn)
-                                                          (in-key in))]
-                                               {out-ids-key ids
-                                                out-key (mapv (fn [x]
-                                                                {target-id-key x})
-                                                              ids)
-                                                count-key (count ids)})))))
-
-                                      ;; reverse direction
-                                      (let [in-key target-id-key
-                                            ;; datomic _underscore naming convention
-                                            out-key (keyword
+                                   [;; normal direction: widget - sprocket(s)
+                                    (let [in-key source-id-key
+                                          out-key attr-key
+                                          out-ids-key target-id-key
+                                          count-key (keyword
                                                      (namespace attr-key)
-                                                     (str "_" (name attr-key)))
-                                            count-key (keyword
-                                                       (namespace attr-key)
-                                                       (str "_" (name attr-key) "-count"))]
+                                                     (str (name attr-key) "-count"))]
+                                      (case cardinality
+                                        :dat.rel/one
                                         (pco/resolver
-                                         (symbol (str target-entity-type
-                                                      "[" out-key "]"
-                                                      "->"
-                                                      entity-type
-                                                      ;; always many on the reverse
-                                                      "+"))
+                                         (symbol (str entity-type "[" attr-key "]->" target-entity-type))
                                          {::pco/input [in-key]
                                           ::pco/output [{out-key
-                                                         [source-id-key]}
+                                                         [target-id-key]}
+                                                        out-ids-key]}
+                                         (fn [{::keys [q ->db conn]} in]
+                                           (let [id (q [:find '?target-id '.
+                                                        :in '$ '?id
+                                                        :where
+                                                        ['?e source-id-key '?id]
+                                                        ['?e attr-key '?target-e]
+                                                        ['?target-e target-id-key '?target-id]]
+                                                       (->db conn)
+                                                       (in-key in))]
+                                             {out-ids-key id
+                                              out-key (when id
+                                                        {target-id-key id})})))
+
+                                        :dat.rel/many
+                                        (pco/resolver
+                                         (symbol (str entity-type "[" attr-key "]->" target-entity-type "+"))
+                                         {::pco/input [in-key]
+                                          ::pco/output [{out-key
+                                                         [target-id-key]}
+                                                        out-ids-key
                                                         count-key]}
                                          (fn [{::keys [q ->db conn]} in]
-                                           (let [ids (q [:find ['?id '...]
-                                                         :in '$ '?target-id
+                                           (let [ids (q [:find ['?target-id '...]
+                                                         :in '$ '?id
                                                          :where
-                                                         ['?target-e target-id-key '?target-id]
+                                                         ['?e source-id-key '?id]
                                                          ['?e attr-key '?target-e]
-                                                         ['?e source-id-key '?id]]
+                                                         ['?target-e target-id-key '?target-id]]
                                                         (->db conn)
                                                         (in-key in))]
-                                             {out-key (mapv (fn [x]
-                                                              {source-id-key x})
+                                             {out-ids-key ids
+                                              out-key (mapv (fn [x]
+                                                              {target-id-key x})
                                                             ids)
-                                              count-key (count ids)}))))]))))
+                                              count-key (count ids)})))))
+
+                                    ;; reverse direction
+                                    (let [in-key target-id-key
+                                          ;; datomic _underscore naming convention
+                                          out-key (keyword
+                                                   (namespace attr-key)
+                                                   (str "_" (name attr-key)))
+                                          count-key (keyword
+                                                     (namespace attr-key)
+                                                     (str "_" (name attr-key) "-count"))]
+                                      (pco/resolver
+                                       (symbol (str target-entity-type
+                                                    "[" out-key "]"
+                                                    "->"
+                                                    entity-type
+                                                    ;; always many on the reverse
+                                                    "+"))
+                                       {::pco/input [in-key]
+                                        ::pco/output [{out-key
+                                                       [source-id-key]}
+                                                      count-key]}
+                                       (fn [{::keys [q ->db conn]} in]
+                                         (let [ids (q [:find ['?id '...]
+                                                       :in '$ '?target-id
+                                                       :where
+                                                       ['?target-e target-id-key '?target-id]
+                                                       ['?e attr-key '?target-e]
+                                                       ['?e source-id-key '?id]]
+                                                      (->db conn)
+                                                      (in-key in))]
+                                           {out-key (mapv (fn [x]
+                                                            {source-id-key x})
+                                                          ids)
+                                            count-key (count ids)}))))])))
                          (apply concat))))))))
 
 (defn ->dynamic-resolvers->resolvers
@@ -193,7 +192,7 @@
                (symbol id)
                {::pco/input (vec in)
                 ::pco/output (vec out)}
-               (fn [{::keys [q ->db conn]} in]
+               (fn [{::keys [_q _->db _conn]} in]
                  (f in)))))))
 
 (defn make-pull [schema {:keys [q pull conn ->db dynamic-resolvers]}]
