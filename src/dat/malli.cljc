@@ -26,9 +26,15 @@
 (defn ->malli-spec
   [{:dat/keys [type spec]}]
   (let [base-type (datalog-type->malli-type type)]
-    (if spec
+    (cond
+      (and base-type spec)
       [:and base-type spec]
-      base-type)))
+
+      base-type
+      base-type
+
+      :else
+      spec)))
 
 (defn ->malli-registry
   [schema]
@@ -66,3 +72,17 @@
                  :cljs (js/Uint8Array. #js [1 2 3])))
     (validate "not-bytes")])
  := [true false])
+
+(rcf/tests
+ "an attr with no :dat/type is validated by its :dat/spec alone"
+ (let [registry (->malli-registry {:entity/file {:file/metadata {:dat/spec [:map [:size :int]]}}})
+       validate (fn [value]
+                  (m/validate :file/metadata value {:registry registry}))]
+   [(validate {:size 3})
+    (validate {:size "three"})])
+ := [true false]
+
+ "an attr with neither :dat/type nor :dat/spec is not in the registry"
+ (-> (->malli-registry {:entity/file {:file/blob {}}})
+     (contains? :file/blob))
+ := false)
