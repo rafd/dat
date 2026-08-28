@@ -11,7 +11,8 @@
               :dat/unique :dat.unique/identity}
     :user/name {:dat/type :db.type/string}
     :user/email {:dat/type :db.type/string}
-    :user/bio {:dat/type :db.type/string}}
+    :user/bio {:dat/type :db.type/string}
+    :user/starred {:dat/rel [:dat.rel/many :entity/post :post/id]}}
    :entity/post
    {:post/id {:dat/type :db.type/uuid
               :dat/unique :dat.unique/identity}
@@ -48,6 +49,9 @@
                      :post/title "T2"
                      :post/body "B2"
                      :post/user [:user/id ada-id]}
+                    {:user/id ada-id
+                     :user/starred [[:post/id first-post-id]
+                                    [:post/id second-post-id]]}
                     {:comment/id comment-id
                      :comment/text "C1"
                      :comment/user [:user/id ada-id]}])
@@ -118,3 +122,26 @@
  := {:entity/post [{:post/user {:user/name "Ada"}}
                    {:post/user {:user/name "Ada"}}]
      :entity/comment [{:comment/user {:user/email "ada@example.com"}}]})
+
+(rcf/tests
+ "a to-many rel resolves as a nested join and as a count"
+
+ (let [{:keys [graph-pull]} (make-graph!)]
+   [(->> (graph-pull {:user/id ada-id} [{:user/starred [:post/title]}])
+         :user/starred
+         (map :post/title)
+         set)
+    (graph-pull {:user/id ada-id} [:user/starred-count])])
+ := [#{"T1" "T2"}
+     {:user/starred-count 2}]
+
+ "the to-many rel does not claim to give the source entity a target id,
+  so a target attr is unreachable from the source instead of silently nil"
+
+ (let [{:keys [graph-pull]} (make-graph!)]
+   (try
+     (graph-pull {:user/id ada-id} [:post/id])
+     ::resolved
+     (catch Exception _
+       ::unreachable)))
+ := ::unreachable)

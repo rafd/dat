@@ -132,7 +132,6 @@
                                          {::pco/input [in-key]
                                           ::pco/output [{out-key
                                                          [target-id-key]}
-                                                        out-ids-key
                                                         count-key]}
                                          (fn [{::keys [q ->db conn]} in]
                                            (let [ids (q [:find ['?target-id '...]
@@ -143,10 +142,9 @@
                                                          ['?target-e target-id-key '?target-id]]
                                                         (->db conn)
                                                         (in-key in))]
-                                             {out-ids-key ids
-                                              out-key (mapv (fn [x]
-                                                              {target-id-key x})
-                                                            ids)
+                                             {out-key (mapv (fn [x]
+                                                             {target-id-key x})
+                                                           ids)
                                               count-key (count ids)})))))
 
                                     ;; reverse direction
