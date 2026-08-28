@@ -17,13 +17,20 @@
      (schema/->db-schema db-type schema))
 
     :dat.db/datascript
-    (if (and (:file-path db-opts)
-             (.exists (io/file (:file-path db-opts))))
-      (let [c (d/restore-conn (d/file-storage (:file-path db-opts)))]
-        (d/reset-schema! c (schema/->db-schema db-type schema))
-        c)
-      (d/create-conn (schema/->db-schema db-type schema)
-                     {:storage (d/file-storage (:file-path db-opts))}))))
+    ;; without a :file-path, the db is in-memory only
+    (let [db-schema (schema/->db-schema db-type schema)
+          file-path (:file-path db-opts)]
+      (cond
+        (and file-path
+             (.exists (io/file file-path)))
+        (doto (d/restore-conn (d/file-storage file-path))
+          (d/reset-schema! db-schema))
+
+        file-path
+        (d/create-conn db-schema {:storage (d/file-storage file-path)})
+
+        :else
+        (d/create-conn db-schema)))))
 
 (defn init!
   [db-type schema db-opts]
