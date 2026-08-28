@@ -113,3 +113,13 @@
             (zipmap (map :db/ident vals)
                     (map #(dissoc % :db/ident) vals)))))))
 
+(rcf/tests
+ (->db-schema :dat.db/datomic {:entity/file {:file/data {:dat/type :db.type/bytes}}})
+ := [{:db/ident :file/data
+      :db/valueType :db.type/bytes
+      :db/cardinality :db.cardinality/one}]
+
+ ;; datascript has no value types
+ (->db-schema :dat.db/datascript {:entity/file {:file/data {:dat/type :db.type/bytes}}})
+ := {:file/data {:db/cardinality :db.cardinality/one}})
+
