@@ -56,11 +56,18 @@
       :dat.db/datalevin ((requiring-resolve 'datalevin.core/close) conn)
       nil)))
 
+(defn- delete-dir!
+  [path]
+  (doseq [file (reverse (file-seq (io/file path)))]
+    (io/delete-file file true)))
+
 (defn clear!
   [db]
   (let [{::keys [db-type schema db-opts conn]} @db]
     (case db-type
       :dat.db/datalevin ((requiring-resolve 'datalevin.core/clear) conn)
+      :dat.db/datascript (when-let [file-path (:file-path db-opts)]
+                           (delete-dir! file-path))
       nil)
     (swap! db assoc ::conn (init-conn! db-type schema db-opts))))
 
