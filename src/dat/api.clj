@@ -1,6 +1,8 @@
 (ns dat.api
+  {:clj-kondo/config '{:lint-as {dat.api/with-transaction clojure.core/let}}}
   (:require
    [clojure.java.io :as io]
+   [hyperfiddle.rcf :as rcf]
    [malli.core :as m]
    [malli.registry :as mr]
    [dat.uuid :as uuid]
@@ -77,6 +79,34 @@
     :dat.db/datalevin ((requiring-resolve 'datalevin.core/transact!) (::conn @db) txs)
     :dat.db/datascript (d/transact! (::conn @db) txs)))
 
+(defn with-transaction-fn
+  [db f]
+  (let [{::keys [db-type conn]} @db]
+    (case db-type
+      :dat.db/datalevin
+      ((requiring-resolve 'datalevin.core/with-transaction-fn)
+       conn
+       (reify java.util.function.Function
+         (apply [_ tx-conn]
+           (f (atom (assoc @db ::conn tx-conn))))))
+
+      :dat.db/datascript
+      ;; datascript has no transactions; serialize blocks and roll back on throw
+      (locking conn
+        (let [db-before @conn]
+          (try
+            (f db)
+            (catch Throwable error
+              (d/reset-conn! conn db-before)
+              (throw error))))))))
+
+(defmacro with-transaction
+  "Runs `body` as a single atomic transaction. `tx-db` is a db to be used
+  in place of `db` for `transact!`, `q` and `pull` within `body`.
+  If `body` throws, all its writes are rolled back."
+  [[tx-db db] & body]
+  `(with-transaction-fn ~db (fn [~tx-db] ~@body)))
+
 (defn q
   [query derefed-db & args]
   (apply (case (::db-type derefed-db)
@@ -104,4 +134,33 @@
 (defn uuid []
   (uuid/random))
 
+(rcf/tests
+ "with-transaction commits the body's writes"
+ (let [db (init! :dat.db/datascript
+                 {:entity/user {:user/id {:dat/type :db.type/uuid
+                                          :dat/unique :dat.unique/identity}
+                                :user/name {:dat/type :db.type/string}}}
+                 {})
+       user-id (uuid)]
+   (with-transaction [tx-db db]
+     (transact! tx-db [{:user/id user-id
+                        :user/name "Ada"}])
+     (transact! tx-db [{:user/id user-id
+                        :user/name "Ada L."}]))
+   (q '[:find [?name ...] :where [_ :user/name ?name]] @db))
+ := ["Ada L."])
 
+(rcf/tests
+ "with-transaction rolls back the body's writes when it throws"
+ (let [db (init! :dat.db/datascript
+                 {:entity/user {:user/name {:dat/type :db.type/string}}}
+                 {})]
+   (transact! db [{:user/name "Ada"}])
+   [(try
+      (with-transaction [tx-db db]
+        (transact! tx-db [{:user/name "Grace"}])
+        (throw (ex-info "boom" {})))
+      (catch clojure.lang.ExceptionInfo _error
+        :thrown))
+    (q '[:find [?name ...] :where [_ :user/name ?name]] @db)])
+ := [:thrown ["Ada"]])
