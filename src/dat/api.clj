@@ -16,7 +16,8 @@
     :dat.db/datalevin
     ((requiring-resolve 'datalevin.core/get-conn)
      (:dir db-opts)
-     (schema/->db-schema db-type schema))
+     (schema/->db-schema db-type schema)
+     (:opts db-opts))
 
     :dat.db/datascript
     ;; without a :file-path, the db is in-memory only
@@ -50,6 +51,16 @@
   wrap, e.g. datalevin.core/listen! or datalevin.core/entity."
   [db]
   (::conn @db))
+
+(defn listen!
+  "Calls `(f tx-report)` after each transaction. Re-register after `clear!`,
+  as it replaces the conn."
+  [db k f]
+  (let [{::keys [db-type conn]} @db]
+    ((case db-type
+       :dat.db/datalevin (requiring-resolve 'datalevin.core/listen!)
+       :dat.db/datascript d/listen!)
+     conn k f)))
 
 (defn close!
   [db]
